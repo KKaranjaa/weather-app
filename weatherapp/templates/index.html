@@ -1,0 +1,219 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Weather App — real-time weather for any city in the world.">
+    <title>Weather App</title>
+    <link rel="stylesheet" href="{% static 'style.css' %}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;600&display=swap" rel="stylesheet"/>
+</head>
+<body style="background-image: url('{{ image_url }}');">
+
+<div class="page-wrapper">
+
+    <!-- ── Main Search Card ── -->
+    <div class="container">
+        <h1>Weather App</h1>
+
+        <form method="POST">
+            {% csrf_token %}
+            <input type="text" name="city" placeholder="Enter city" autocomplete="off">
+            <button type="submit">Search</button>
+        </form>
+
+        <div class="weather">
+            <div class="left">
+                <h2>{{temp}}&deg;</h2>
+                <h3>{{city}}{% if country %}, {{country}}{% endif %}</h3>
+                <!-- live city clock (ticks every second) -->
+                <h3 id="city-clock" class="live-clock" data-tz-offset="{{ timezone_offset|default:0 }}">{{ctime}}</h3>
+            </div>
+
+            <div class="right">
+                <div class="icon">
+                    <img src="https://openweathermap.org/img/w/{{ icon }}.png" alt="{{ description }} icon">
+                </div>
+                <div class="condition">
+                    <p>{{ description }}</p>
+                    <!-- live local clock -->
+                    <p>YOUR TIME: <span id="local-clock" class="live-clock"></span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Auto-detected Location Card ── -->
+    <div class="autodetected-data" id="location-section">
+
+        <div id="weather-info">
+            <p class="location-loading">&#128205; Detecting your location…</p>
+        </div>
+
+        <!-- Always-visible refresh button for when the user moves location -->
+        <button id="detect-btn" class="detect-btn">
+            <span class="detect-btn__icon">&#128205;</span> Detect My Location
+        </button>
+
+    </div>
+
+</div><!-- end page-wrapper -->
+
+<script>
+// ─────────────────────────────────────────────────────────────
+//  Live clocks
+// ─────────────────────────────────────────────────────────────
+
+// City clock: driven by the UTC offset the server sends (in seconds)
+const cityClock  = document.getElementById('city-clock');
+const localClock = document.getElementById('local-clock');
+
+function pad(n){ return String(n).padStart(2,'0'); }
+
+function formatClock(date){
+    return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+// UTC offset in seconds for the searched city (set by Django template)
+let cityTzOffset = parseInt(cityClock ? cityClock.dataset.tzOffset || 0 : 0, 10);
+
+function tickClocks(){
+    const now       = new Date();
+    const utcMs     = now.getTime() + now.getTimezoneOffset() * 60000;
+    const cityDate  = new Date(utcMs + cityTzOffset * 1000);
+
+    if(cityClock)  cityClock.textContent  = formatClock(cityDate);
+    if(localClock) localClock.textContent = formatClock(now);
+}
+
+// Initialise immediately, then tick every second
+tickClocks();
+setInterval(tickClocks, 1000);
+
+
+// ─────────────────────────────────────────────────────────────
+//  Location detection  (runs once on page load)
+// ─────────────────────────────────────────────────────────────
+
+const detectBtn = document.getElementById('detect-btn');
+const weatherInfo = document.getElementById('weather-info');
+
+// Location clock interval handle (so we can restart it)
+let locationClockInterval = null;
+let locationTzOffset = 0;   // seconds offset for detected city
+
+function tickLocationClock(){
+    const el = document.getElementById('loc-clock');
+    if(!el) return;
+    const now    = new Date();
+    const utcMs  = now.getTime() + now.getTimezoneOffset() * 60000;
+    const locDate= new Date(utcMs + locationTzOffset * 1000);
+    el.textContent = formatClock(locDate);
+}
+
+function renderLocationWeather(data){
+    const city        = data.city;
+    const country     = data.country ? `, ${data.country}` : '';
+    const description = data.description;
+    const icon        = data.icon;
+    const temp        = Math.round(data.temp * 10) / 10;
+    const day         = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+    locationTzOffset  = data.timezone || 0;
+
+    weatherInfo.innerHTML = `
+        <h1 class="location-title">Your Location: ${city}${country}</h1>
+        <div class="location-details">
+            <p class="location-day">${day}</p>
+            <p class="location-desc">${description}</p>
+            <p class="location-temp">Temperature: ${temp}&deg;C</p>
+            <img src="https://openweathermap.org/img/w/${icon}.png" alt="Weather Icon" class="location-icon">
+            <p class="location-time" id="loc-clock">--:--:--</p>
+        </div>
+    `;
+
+    // Start / restart the location clock
+    if(locationClockInterval) clearInterval(locationClockInterval);
+    tickLocationClock();
+    locationClockInterval = setInterval(tickLocationClock, 1000);
+}
+
+const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
+let autoRefreshTimer = null;
+
+function fetchLocationWeather(lat, lon, silent = false){
+    fetch(`/location_weather/?lat=${lat}&lon=${lon}`)
+        .then(r => r.json())
+        .then(data => {
+            if(data.error){
+                // Only show error text on the first (non-silent) fetch
+                if(!silent){
+                    weatherInfo.innerHTML = '<p class="location-loading">Could not retrieve location weather.</p>';
+                }
+                return;
+            }
+            // Update the DOM in-place (no reload, no flicker)
+            renderLocationWeather(data);
+
+            // Start the silent 5-minute refresh cycle the first time we succeed
+            if(!autoRefreshTimer && localStorage.getItem(STORAGE_KEY)){
+                autoRefreshTimer = setInterval(() => doGeolocate(true), AUTO_REFRESH_MS);
+            }
+        })
+        .catch(() => {
+            // Silent refreshes fail quietly; only show error on explicit requests
+            if(!silent){
+                weatherInfo.innerHTML = '<p class="location-loading">&#128205; Could not detect location.</p>';
+            }
+        });
+}
+
+const STORAGE_KEY = 'weatherapp_location_asked';
+
+function doGeolocate(silent = false){
+    // Silently request the position — browser handles its own permission UI
+    if(!navigator.geolocation){
+        if(!silent) weatherInfo.innerHTML = '<p class="location-loading">Geolocation is not supported by your browser.</p>';
+        return;
+    }
+    navigator.geolocation.getCurrentPosition(
+        pos => fetchLocationWeather(pos.coords.latitude, pos.coords.longitude, silent),
+        err => {
+            // Background refresh errors are swallowed — user sees nothing
+            if(!silent){
+                console.warn('Geolocation error:', err);
+                weatherInfo.innerHTML = '<p class="location-loading">&#128205; Location access denied or unavailable.</p>';
+            }
+        }
+    );
+}
+
+function initLocationDetection(){
+    const alreadyAsked = localStorage.getItem(STORAGE_KEY);
+
+    if(!alreadyAsked){
+        // First visit ever — show our friendly explanation, then request
+        const allowed = confirm('Allow Weather App to access your location for local weather?');
+        localStorage.setItem(STORAGE_KEY, 'true');
+        if(allowed){
+            doGeolocate();
+        } else {
+            weatherInfo.innerHTML = '<p class="location-loading">Location permission declined. Use the button below to try again.</p>';
+        }
+    } else {
+        // Returning visit — go straight to geolocation (browser remembers its own choice)
+        doGeolocate();
+    }
+}
+
+// ── Auto-detect on page load ──
+window.addEventListener('load', initLocationDetection);
+
+// ── Button: always fetches fresh location, no extra confirm() needed ──
+detectBtn.addEventListener('click', doGeolocate);
+</script>
+
+</body>
+</html>
