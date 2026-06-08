@@ -5,6 +5,11 @@ from django.http import JsonResponse
 import requests
 import datetime
 import os
+from django.views.generic import TemplateView
+
+class ServiceWorkerView(TemplateView):
+    template_name = 'sw.js'
+    content_type = 'application/javascript'
 
 # Load API keys from environment variables
 WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')
