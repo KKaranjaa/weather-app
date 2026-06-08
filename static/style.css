@@ -38,15 +38,19 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 2rem 1rem 4rem;
+  justify-content: flex-start;
+  padding: 2rem 1rem;
   min-height: 100vh;
   gap: 1.5rem;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 /* --- Main Search Card --- */
 .container {
   width: 100%;
-  max-width: 680px;
+  max-width: 500px;
   background: var(--transp-white-2);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -55,7 +59,11 @@ body {
   border-radius: 16px;
   color: var(--text-dark);
   box-shadow: 0 8px 32px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
+
 
 h1 {
   text-align: center;
@@ -171,17 +179,22 @@ button[type="submit"]:hover {
 /* --- Auto-detected Location Card --- */
 .autodetected-data {
   width: 100%;
-  max-width: 680px;
+  max-width: 500px;
   background: var(--transp-white-2);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  padding: 1.5rem 2rem;
+  padding: 2rem;
   border: 2px solid var(--transp-white-1);
   border-radius: 16px;
   color: var(--text-dark);
   text-align: center;
   box-shadow: 0 8px 32px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
 }
+
 
 .location-loading {
   color: var(--text-dark);
@@ -264,32 +277,33 @@ button[type="submit"]:hover {
    RESPONSIVE BREAKPOINTS
    ============================================================ */
 
-/* Large desktops (1400px+) — slightly wider cards */
-@media (min-width: 1400px) {
+/* Desktop / Tablet Landscape (900px and up) - side by side layout */
+@media (min-width: 900px) {
+  .page-wrapper {
+    flex-direction: row;
+    align-items: stretch; /* Make cards match height */
+    justify-content: center;
+    gap: 2rem;
+    padding: 4rem 2rem;
+  }
+
   .container,
   .autodetected-data {
-    max-width: 780px;
+    flex: 1;
+    min-height: 400px; /* Consistent height for alignment */
   }
 }
 
-/* Tablets landscape / small laptops (1000px and below) */
-@media (max-width: 1000px) {
-  .container,
-  .autodetected-data {
-    max-width: 90%;
-  }
-}
-
-/* Tablets portrait (768px and below) */
-@media (max-width: 768px) {
+/* Tablets portrait / smaller screens (under 900px) */
+@media (max-width: 899px) {
   .page-wrapper {
     padding: 1.5rem 1rem 3rem;
   }
 
   .container,
   .autodetected-data {
-    max-width: 95%;
-    padding: 1.5rem;
+    width: 100%;
+    max-width: 600px;
   }
 }
 
@@ -346,3 +360,4 @@ button[type="submit"]:hover {
     border-radius: 12px;
   }
 }
+
